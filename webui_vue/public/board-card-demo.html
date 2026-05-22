@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小板书卡片渲染 Demo</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  :root {
+    --card-width: 640px;
+    --bg: #faf9f7;
+    --card-bg: #ffffff;
+    --text: #2c2c2c;
+    --text-secondary: #5a5a5a;
+    --border: #e0dcd5;
+    --accent: #8b6f47;
+    --accent-soft: rgba(139,111,71,0.06);
+    --accent-light: rgba(139,111,71,0.2);
+    --highlight-bg: #fdf8f0;
+    --highlight-border: #d4a853;
+    --compare-left-bg: #f7f4f0;
+    --compare-right-bg: #f0f2f7;
+    --compare-left-border: #c4b99a;
+    --compare-right-border: #9aacb9;
+    --qa-bg: #f9f8f5;
+    --qa-border: #d0cbc0;
+    --divider: #e8e4db;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: "Noto Serif SC", "Source Han Serif SC", "SimSun", "STSong", serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.8;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48px;
+  }
+
+  /* ====== 板书卡片容器 ====== */
+  .board-card {
+    width: var(--card-width);
+    max-width: 100%;
+    margin: 0 auto;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+    padding: 32px 36px;
+  }
+
+  .board-card-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #b0a89a;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+
+  /* ====== 卡片内的 markdown 元素 ====== */
+  .board-card h3 {
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--divider);
+  }
+
+  /* -- 表格 → 对比卡片 -- */
+  .board-card table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 16px 0;
+    margin: 0 0 20px 0;
+  }
+  .board-card thead th {
+    font-size: 0.95rem;
+    font-weight: 700;
+    padding: 10px 0 6px;
+    text-align: center;
+    border-bottom: 2px solid var(--divider);
+  }
+  .board-card thead th:first-child { color: #8b6914; }
+  .board-card thead th:last-child  { color: #3a5a8c; }
+  .board-card tbody td {
+    padding: 8px 12px;
+    text-align: center;
+    vertical-align: middle;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    border-radius: 6px;
+  }
+  .board-card tbody td:first-child {
+    background: var(--compare-left-bg);
+    border-left: 3px solid var(--compare-left-border);
+  }
+  .board-card tbody td:last-child {
+    background: var(--compare-right-bg);
+    border-left: 3px solid var(--compare-right-border);
+  }
+
+  /* -- blockquote → 高亮横条 / 金句 -- */
+  .board-card blockquote {
+    text-align: center;
+    margin: 14px 0;
+    padding: 14px 24px;
+    background: var(--highlight-bg);
+    border-left: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: #5c4300;
+    position: relative;
+  }
+  /* 以问号结尾 → 放大 */
+  .board-card blockquote:is(.is-question) {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #6b3a0a;
+    padding: 20px 32px;
+    background: linear-gradient(135deg, #fef9f0 0%, #fef5e4 100%);
+    border: 1.5px solid var(--highlight-border);
+    border-radius: 10px;
+  }
+
+  /* -- 加粗标签段落 → 问答气泡 -- */
+  .board-card p.qa-line {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .board-card .qa-bubble {
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: var(--qa-bg);
+    border: 1px solid var(--qa-border);
+    font-size: 0.9rem;
+    max-width: 90%;
+  }
+  .board-card .qa-bubble.q   { align-self: flex-start; border-bottom-left-radius: 2px; }
+  .board-card .qa-bubble.a   { align-self: flex-end;   border-bottom-right-radius: 2px; background: #f4f2fa; border-color: #d5d0e8; }
+
+  /* -- 无序列表 → 要点列表 -- */
+  .board-card ul {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 16px;
+  }
+  .board-card ul li {
+    padding: 6px 0 6px 28px;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    position: relative;
+  }
+  .board-card ul li::before {
+    content: '◆';
+    position: absolute;
+    left: 4px;
+    top: 6px;
+    font-size: 0.5rem;
+    color: var(--accent);
+    opacity: 0.6;
+  }
+
+  /* -- 有序列表 -- */
+  .board-card ol {
+    padding-left: 24px;
+    margin: 8px 0 16px;
+  }
+  .board-card ol li {
+    font-size: 0.9rem;
+    line-height: 1.7;
+    padding: 4px 0;
+  }
+
+  /* -- 段落文字 -- */
+  .board-card p {
+    font-size: 0.9rem;
+    line-height: 1.8;
+    margin: 0 0 8px;
+  }
+
+  /* -- 分割线 -- */
+  .board-card hr {
+    border: none;
+    border-top: 1px dashed var(--divider);
+    margin: 16px 0;
+  }
+
+  /* -- strong 加粗 -- */
+  .board-card strong { color: #4a3520; }
+
+  /* ====== 页面标题 ====== */
+  .page-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    text-align: center;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+
+  /* ====== 各小节标题 ====== */
+  .section-label {
+    font-size: 0.78rem;
+    color: #999;
+    letter-spacing: 0.05em;
+    text-align: center;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">小板书卡片渲染 Demo</div>
+
+<!-- ============================================ -->
+<!-- 示例1：对比型                                              -->
+<!-- ============================================ -->
+<div class="section-label">示例 1 — 对比型（AI 写 2 列表格）</div>
+<div class="board-card">
+  <div class="board-card-label">📋 本节板书</div>
+  <h3>兼爱 vs 仁爱</h3>
+  <div id="ex1"></div>
+</div>
+
+<!-- ============================================ -->
+<!-- 示例2：推理链 + 金句                                        -->
+<!-- ============================================ -->
+<div class="section-label">示例 2 — 推理链 + 反问金句（AI 写 blockquote）</div>
+<div class="board-card">
+  <div class="board-card-label">📋 本节板书</div>
+  <h3>墨子的论证逻辑</h3>
+  <div id="ex2"></div>
+</div>
+
+<!-- ============================================ -->
+<!-- 示例3：问答对                                                -->
+<!-- ============================================ -->
+<div class="section-label">示例 3 — 问答对（AI 写加粗标签段落）</div>
+<div class="board-card">
+  <div class="board-card-label">📋 本节板书</div>
+  <h3>争鸣与回应</h3>
+  <div id="ex3"></div>
+</div>
+
+<!-- ============================================ -->
+<!-- 示例4：混合型                                                -->
+<!-- ============================================ -->
+<div class="section-label">示例 4 — 混合型（表格 + 列表 + 金句）</div>
+<div class="board-card">
+  <div class="board-card-label">📋 本节板书</div>
+  <h3>墨子的语言风格</h3>
+  <div id="ex4"></div>
+</div>
+
+<script>
+  marked.setOptions({ breaks: true, gfm: true })
+
+  const md1 = `| 儒家 | 墨家 |
+|------|------|
+| 爱有差等，先亲后疏 | 爱无差等，一视同仁 |
+| 亲亲之情是根基 | 兼爱则天下治 |`
+
+  const md2 = `> 争论两千年 → 至今仍有意义
+
+> 能不能既爱亲人，又不亏待陌生人？`
+
+  const md3 = `**孟子批评：** "无父" → 动摇人伦根基
+
+**墨子回应：** 不是不认父亲 → 是不只认父亲`
+
+  const md4 = `| 儒家仁爱 | 墨家兼爱 |
+|------|------|
+| 爱有差等 | 爱无差等 |
+| 先亲后疏 | 一视同仁 |
+
+- 质朴直白，不事雕琢 → 像写说明书
+- 排比穷举 → 不留遗漏
+- 反问连用 → 让读者自己得出结论
+
+> 不是打动你 → 是说服你`
+
+  // Parse and inject
+  document.getElementById('ex1').innerHTML = marked.parse(md1)
+  document.getElementById('ex2').innerHTML = marked.parse(md2)
+  document.getElementById('ex3').innerHTML = marked.parse(md3)
+  document.getElementById('ex4').innerHTML = marked.parse(md4)
+
+  // Post-process: tag question blockquotes
+  document.querySelectorAll('.board-card blockquote').forEach(bq => {
+    const text = bq.textContent.trim()
+    if (text.endsWith('？') || text.endsWith('?')) {
+      bq.classList.add('is-question')
+    }
+  })
+
+  // Post-process: detect QA pairs (adjacent paragraphs starting with **XX：**)
+  document.querySelectorAll('.board-card').forEach(card => {
+    const paragraphs = card.querySelectorAll(':scope > p')
+    const qaPairs = []
+    let i = 0
+    while (i < paragraphs.length) {
+      const p = paragraphs[i]
+      const html = p.innerHTML
+      const m = html.match(/^<strong>(.+?)[：:]<\/strong>\s*(.+)/)
+      if (m) {
+        const label = m[1].trim()
+        const body = m[2].trim()
+        if (/批评|问|质疑|反驳|攻击/.test(label)) {
+          // Look for response in next paragraph
+          const next = paragraphs[i + 1]
+          if (next) {
+            const nm = next.innerHTML.match(/^<strong>(.+?)[：:]<\/strong>\s*(.+)/)
+            if (nm && /回应|答|回复|辩解|反驳|辩护|说/.test(nm[1].trim())) {
+              p.outerHTML = `<div class="qa-bubble q"><strong>${label}：</strong>${body}</div>`
+              next.outerHTML = `<div class="qa-bubble a"><strong>${nm[1].trim()}：</strong>${nm[2].trim()}</div>`
+              i += 2
+              continue
+            }
+          }
+        }
+      }
+      i++
+    }
+  })
+</script>
+
+</body>
+</html>
